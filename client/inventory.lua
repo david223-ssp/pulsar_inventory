@@ -940,16 +940,24 @@ function OpenInventory()
 		return
 	end
 
-	local requestSecondary = false
 	if _inInvPoly ~= nil then
-		SecondInventory = { invType = _inInvPoly.inventory.invType, owner = _inInvPoly.inventory.owner }
+		local invType, owner = _inInvPoly.inventory.invType, _inInvPoly.inventory.owner
+		plsr.Callbacks:ServerCallback("Inventory:Server:Open", { invType = invType, owner = owner }, function(granted)
+			if granted then
+				SecondInventory = { invType = invType, owner = owner }
+				plsr.Inventory.Open:Player(true)
+			else
+				plsr.Inventory.Open:Player(false)
+			end
+		end)
+		return
+	end
+
+	local requestSecondary = false
+	local ground = GetGroundSecondary(true)
+	if ground ~= nil then
+		SecondInventory = ground
 		requestSecondary = true
-	else
-		local ground = GetGroundSecondary(true)
-		if ground ~= nil then
-			SecondInventory = ground
-			requestSecondary = true
-		end
 	end
 
 	plsr.Inventory.Open:Player(requestSecondary)
