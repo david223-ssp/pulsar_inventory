@@ -5,7 +5,7 @@ name 'Pulsar Inventory'
 description 'Player inventory with a drag-and-drop grid, crafting, and hotbar'
 author 'Artmines - maintained for Pulsar Framework'
 url 'https://pulsarframe.work'
-version 'v1.0.0'
+version 'v1.0.1'
 
 version_check 'yes'
 github 'https://github.com/PulsarFW/pulsar_inventory'
