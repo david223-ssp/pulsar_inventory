@@ -11,6 +11,36 @@ local function cacheKey(owner, invType)
 	return ("%s:%s"):format(owner, invType)
 end
 
+-- set around AdjustCashItem's own Add/Remove call so its write doesn't loop back into itself below
+_cashSyncGuard = {}
+
+local function sumItemCount(slots, itemName)
+	local total = 0
+	for i = 1, #slots do
+		if slots[i].name == itemName then
+			total += slots[i].count
+		end
+	end
+	return total
+end
+
+-- keeps Cash in sync with Config.CashAsItem's stack count on any inventory change (personal inventories only)
+local function syncCashItem(owner, invType, oldSlots, newSlots)
+	if invType ~= 1 or not Config.CashAsItem or _cashSyncGuard[tostring(owner)] then
+		return
+	end
+
+	local delta = sumItemCount(newSlots, Config.CashAsItem) - sumItemCount(oldSlots or {}, Config.CashAsItem)
+	if delta == 0 then
+		return
+	end
+
+	local char = plsr.Fetch:SID(tonumber(owner) or owner)
+	if char then
+		char:SetData("Cash", math.max(0, math.floor((char:GetData("Cash") or 0) + delta)))
+	end
+end
+
 ---@param owner string|number
 ---@param invType number
 ---@return table[] slots decoded slot entries (deep copy), empty table if the instance does not exist yet
@@ -56,6 +86,7 @@ function SaveInventory(owner, invType, slots)
 	end
 
 	local key = cacheKey(owner, invType)
+	syncCashItem(owner, invType, _inventoryCache[key], slots)
 	_inventoryCache[key] = slots
 	_inventoryCacheTouched[key] = os.time()
 

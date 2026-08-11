@@ -975,7 +975,7 @@ RegisterNUICallback("MergeSlot", function(data, cb)
 				local veh = NetToVeh(SecondInventory.netId)
 				if veh then
 					local vEnt = plsr.State.Entity(veh)
-					if vEnt and not vEnt.Owned and not vEnt.PleaseDoNotFuckingDelete then
+					if vEnt and not vEnt.Owned and not vEnt.PreventDelete then
 						TriggerServerEvent("Vehicles:Server:StopDespawn", SecondInventory.netId)
 					end
 				end
@@ -1003,7 +1003,7 @@ RegisterNUICallback("SwapSlot", function(data, cb)
 				local veh = NetToVeh(SecondInventory.netId)
 				if veh then
 					local vEnt = plsr.State.Entity(veh)
-					if vEnt and not vEnt.Owned and not vEnt.PleaseDoNotFuckingDelete then
+					if vEnt and not vEnt.Owned and not vEnt.PreventDelete then
 						TriggerServerEvent("Vehicles:Server:StopDespawn", SecondInventory.netId)
 					end
 				end
@@ -1031,7 +1031,7 @@ RegisterNUICallback("MoveSlot", function(data, cb)
 				local veh = NetToVeh(SecondInventory.netId)
 				if veh then
 					local vEnt = plsr.State.Entity(veh)
-					if vEnt and not vEnt.Owned and not vEnt.PleaseDoNotFuckingDelete then
+					if vEnt and not vEnt.Owned and not vEnt.PreventDelete then
 						TriggerServerEvent("Vehicles:Server:StopDespawn", SecondInventory.netId)
 					end
 				end

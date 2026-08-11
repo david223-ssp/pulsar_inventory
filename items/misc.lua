@@ -1163,4 +1163,19 @@ _itemsSource["misc"] = {
 		weight = 0,
 		durability = (60 * 60 * 24),
 	},
+	{
+		-- physical stand-in for wallet cash when Config.CashAsItem points at this item - see server/inventory_store.lua
+		name = "cash",
+		label = "Cash",
+		description = "A stack of cash.",
+		price = 0,
+		isUsable = false,
+		isRemoved = false,
+		isStackable = 999999,
+		type = 5,
+		rarity = 1,
+		closeUi = false,
+		metalic = false,
+		weight = 0,
+	},
 }

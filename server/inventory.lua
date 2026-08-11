@@ -210,6 +210,13 @@ CreateThread(function()
 		local char = plsr.Fetch:CharacterSource(source)
 		local sid = char:GetData("SID")
 
+		if Config.CashAsItem then
+			local cashDelta = (char:GetData("Cash") or 0) - INVENTORY.Items:GetCount(sid, 1, Config.CashAsItem)
+			if cashDelta ~= 0 then
+				INVENTORY:AdjustCashItem(sid, cashDelta)
+			end
+		end
+
 		_refreshAttchs[sid] = true
 		_refreshGangChain[sid] = true
 		refreshShit(sid, true)
@@ -680,6 +687,12 @@ function checkDestWeight(data, item, displacedWeight)
 	return destWeight <= destCapacity
 end
 
+-- true if a container item is about to be dropped into the storage it itself owns - the item is the only key
+-- back into that storage, so trapping it inside makes the storage permanently unreachable
+function isContainerOwnStorage(item, slotEntry, ownerTo)
+	return item.type == 10 and slotEntry.MetaData?.Container ~= nil and ownerTo == ("container:%s"):format(slotEntry.MetaData.Container)
+end
+
 function DoMerge(source, data, cb)
 	local char = plsr.Fetch:CharacterSource(source)
 
@@ -1121,6 +1134,13 @@ function DoSwap(source, data, cb)
 			return
 		end
 
+		if isContainerOwnStorage(item, slotFrom, data.ownerTo) then
+			cb({ reason = "Can't Put A Container Inside Itself" })
+			sendRefreshForClient(source, data.ownerFrom, data.invTypeFrom, data.slotFrom)
+			sendRefreshForClient(source, data.ownerTo, data.invTypeTo, data.slotTo)
+			return
+		end
+
 		-- a swap moves weight both ways at once, so both sides need their own capacity check
 		local toItemData = itemsDatabase[slotTo.Name]
 		local toWeight = (toItemData and toItemData.weight or 0) * slotTo.Count
@@ -1519,6 +1539,13 @@ function DoMove(source, data, cb)
 
 		if slotFrom == nil then
 			cb({ reason = "Item No Longer In That Slot" })
+			sendRefreshForClient(source, data.ownerFrom, data.invTypeFrom, data.slotFrom)
+			sendRefreshForClient(source, data.ownerTo, data.invTypeTo, data.slotTo)
+			return
+		end
+
+		if isContainerOwnStorage(item, slotFrom, data.ownerTo) then
+			cb({ reason = "Can't Put A Container Inside Itself" })
 			sendRefreshForClient(source, data.ownerFrom, data.invTypeFrom, data.slotFrom)
 			sendRefreshForClient(source, data.ownerTo, data.invTypeTo, data.slotTo)
 			return
@@ -2383,6 +2410,25 @@ INVENTORY = {
 	HasItems = function(self, Owner, Type)
 		return #LoadInventoryRaw(Owner, Type) > 0
 	end,
+	-- called by plsr.Wallet:Modify to keep Config.CashAsItem's stack in sync with a cash change
+	AdjustCashItem = function(self, sid, delta)
+		if not Config.CashAsItem or not sid or not delta or delta == 0 then
+			return false
+		end
+
+		local key = tostring(sid)
+		_cashSyncGuard[key] = true
+
+		local ok
+		if delta > 0 then
+			ok = INVENTORY:AddItem(sid, Config.CashAsItem, delta, {}, 1) ~= nil
+		else
+			ok = INVENTORY.Items:Remove(sid, 1, Config.CashAsItem, math.abs(delta))
+		end
+
+		_cashSyncGuard[key] = nil
+		return ok
+	end,
 	GetMatchingSlot = function(self, Owner, Name, Count, Type)
 		if not itemsDatabase[Name].isStackable then
 			return nil
@@ -2768,7 +2814,7 @@ INVENTORY = {
 		GetCounts = function(self, owner, invType)
 			if invType == 1 then
 				if _invCounts[owner] == nil then
-					getInventory(owner, invType)
+					getInventory(owner, owner, invType)
 				end
 				return _invCounts[owner]
 			else
