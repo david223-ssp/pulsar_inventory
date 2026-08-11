@@ -6,7 +6,7 @@ Config.DropProp = "prop_med_bag_01b"
 Config.DropPropDistance = 25.0
 
 -- item name to sync with wallet cash (see items/misc.lua's "cash" entry), or false to disable
-Config.CashAsItem = "cash"
+Config.CashAsItem = 'cash'
 
 function hasValue(tbl, value)
 	for k, v in ipairs(tbl or {}) do

@@ -3544,6 +3544,10 @@ INVENTORY = {
 	}
 }
 
+AddEventHandler("Wallet:Shared:CashModified", function(sid, delta)
+	INVENTORY:AdjustCashItem(sid, delta)
+end)
+
 function UpdateCharacterItemStates(source, inventory, adding)
 	local char = plsr.Fetch:CharacterSource(source)
 	if not char then
