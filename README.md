@@ -26,7 +26,7 @@
 
 <br/>
 
-[Overview](#overview) · [Theming](#theming) · [Hotkeys](#hotkeys) · [Dependencies](#dependencies)
+[Overview](#overview) · [What's Changed](#whats-changed) · [Theming](#theming) · [Hotkeys](#hotkeys) · [Dependencies](#dependencies)
 
 </div>
 
@@ -35,6 +35,46 @@
 ## Overview
 
 The custom inventory system includes a dual-pane item grid (your inventory on one side, a secondary pane on the other reused for trunk, glovebox, ground, stashes, shops, and other players' inventories), a custom mouse-driven drag-and-drop engine, a crafting screen, an always-on hotbar, and a pickup/loss/use toast feed.
+
+---
+
+## What's Changed
+
+Changes made on top of the original Pulsar release (`v1.0.3`):
+
+**Physical ground items** — `server/ground_items.lua`, `client/drops.lua`, `Config.GroundItems`
+- Every entry in a dropzone is now its own prop where it landed, instead of one bag per dropzone. Storage is unchanged (dropzones, `invType 10`, one DB row each); each entry just stores its own `groundPos`, decided by the server in `SaveInventory`.
+- Per-item and per-type props (`Props`, `TypeProps`); weapons use their own weapon model.
+- Floating pickup prompt with outline and **[E]** to pick up; `UseTarget = true` switches back to the targeting menu.
+- `Enabled = false` restores the old single-bag behaviour (`Config.DropProp`).
+
+**Place mode** — `client/place.lua`, `Config.PlaceMode`
+- "Place" in the item menu shows a transparent preview that follows the camera: **[E]** place, **[Mouse wheel]** rotate, **[C]** cancel. The server checks the distance before moving the item.
+
+**Give / throw mode** — `client/give.lua`, `Config.GiveMode`
+- "Give" puts the item in your hand: **[E]** hands it to the player you are facing, **[Left Click]** throws it where you aim, **[C]** cancels.
+- Server-side checks for distance, rate limit, room and weight; a one-shot trusted access (`GrantTrustedAccess`) lets these flows bypass the normal 3 m dropzone rule only after those checks pass.
+- Per-item blacklists for give, throw and place. All player-facing text lives in `Config.GiveMode.Text`.
+
+**Character equipment** — `server/equipment.lua`, `Config.Equipment`
+- New per-character equipment inventory (`invType 300`, owner = SID) shown around a body silhouette in the UI.
+- Backpack slot: any item with `backpack = true` (a type 10 container) can be equipped, and its storage opens directly under the player pane. A `backpack` item was added to `items/containers.lua`.
+- The other slots (armor, phone, parachute, wallet, key) are display-only for now, so other resources that look for those items in the player inventory keep working.
+
+**Health & Injuries tab** — `client/health.lua`, `server/health.lua`, `Config.HealthTab`
+- New UI tab showing health, armor, stamina and per-limb injuries/bleeding from `pulsar_damage`, with Major/Critical severity levels.
+- "Heal Injury" uses the first item from `healItems` the player carries through the normal item-use flow, so `pulsar_damage` still owns all healing. The tab shows as unavailable when `pulsar_damage` is not running.
+
+**Cash as an item** — `Config.CashAsItem`, `server/inventory_store.lua`, `items/misc.lua`
+- A `cash` item kept in sync with the character's wallet cash. Set `Config.CashAsItem = false` to disable.
+
+**Inventory store**
+- Write-through cache for inventory loads: every write is still saved to the DB synchronously, the cache only skips repeat loads and always hands out deep copies.
+
+**UI (Svelte)**
+- New shell with tab navigation (Inventory / Health / Crafting), equipment panel and body highlight.
+- New right-click context menu (item header, quick-action tiles, item-specific actions, favourites, keyboard navigation) positioned with `@floating-ui/dom`.
+- Reworked slot grid, pane panel, item tooltip and theme (`ui/src/theme.css`). `ui/dist/` has been rebuilt.
 
 ---
 
@@ -70,6 +110,23 @@ Commit the rebuilt `ui/dist/` — that's what actually ships.
 - `pulsar_core` — framework core
 - `pulsar_pwnzor` — anti-cheat check loaded alongside every resource
 - `oxmysql` — inventory persistence
+- `pulsar_damage` *(optional)* — source of the Health & Injuries tab data and healing; the tab is disabled when it is not started (resource name set in `Config.HealthTab.resource`)
+
+### UI build dependencies
+
+Only needed to rebuild `ui/dist/` ([Bun](https://bun.sh) is used as the package manager):
+
+| Package | Version | Use |
+|---|---|---|
+| `@floating-ui/dom` | 1.6.13 | Context menu / tooltip positioning |
+| `@fortawesome/free-solid-svg-icons` | ^6.6.0 | Icons |
+| `dompurify` | ^3.2.7 | Sanitizing item descriptions/metadata |
+| `svelte` *(dev)* | ^5.1.0 | UI framework |
+| `@sveltejs/vite-plugin-svelte` *(dev)* | ^4.0.0 | Vite integration |
+| `vite` *(dev)* | ^5.4.11 | Bundler |
+| `typescript` *(dev)* | ^5.6.3 | Type checking |
+| `svelte-check` *(dev)* | ^4.0.5 | `bun run check` |
+| `@tsconfig/svelte`, `@types/dompurify` *(dev)* | ^5.0.4, ^3.0.5 | Type configs |
 
 ---
 
