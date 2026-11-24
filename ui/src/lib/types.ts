@@ -28,6 +28,12 @@ export interface ItemDefinition {
 	schematic?: string;
 	iconOverride?: string;
 	staticMetadata?: Record<string, unknown> | string;
+	/** Storage entity type, present on type 10 (container) items */
+	container?: number;
+	/** Right-click menu entry that opens the container (e.g. "Open SIM Tray"), only shown when set */
+	containerLabel?: string;
+	/** Fits the backpack equipment slot (see Config.Equipment in config.lua) */
+	backpack?: boolean;
 	invalid?: boolean;
 }
 
@@ -88,7 +94,12 @@ export interface InventorySlotItem {
 	id?: number | string;
 }
 
-export type PaneId = 'player' | 'secondary';
+export type PaneId = 'player' | 'secondary' | 'backpack' | 'equipment';
+
+/** Character equipment slots shown around the silhouette */
+export type EquipmentSlotId = 'backpack' | 'armor' | 'phone' | 'parachute' | 'wallet' | 'key';
+
+export type InventoryTab = 'inventory' | 'health' | 'crafting' | 'experience';
 
 export interface PaneAction {
 	icon: string;

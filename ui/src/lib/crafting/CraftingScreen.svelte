@@ -37,11 +37,11 @@
 
 <style>
 	.screen {
-		width: 34vw;
+		width: 100%;
+		height: 100%;
 		display: flex;
 		flex-direction: column;
-		background: rgba(10, 9, 14, 0.4);
-		padding: 1.4vh 1.2vw;
+		padding: calc(var(--u) * 16);
 	}
 
 	.search {

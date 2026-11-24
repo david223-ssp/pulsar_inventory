@@ -87,6 +87,15 @@ function SaveInventory(owner, invType, slots)
 
 	local key = cacheKey(owner, invType)
 	syncCashItem(owner, invType, _inventoryCache[key], slots)
+
+	-- itens físicos no chão: posições das entradas das dropzones e envio aos clientes (server/ground_items.lua)
+	if OnInventorySaved ~= nil then
+		local ok, err = pcall(OnInventorySaved, owner, invType, slots)
+		if not ok then
+			plsr.Logger:Error("Inventory", "OnInventorySaved falhou: " .. tostring(err), { console = true })
+		end
+	end
+
 	_inventoryCache[key] = slots
 	_inventoryCacheTouched[key] = os.time()
 

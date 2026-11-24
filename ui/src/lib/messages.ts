@@ -1,6 +1,7 @@
 // central NUI message router, forwards SendNUIMessage calls from client/*.lua to the inventory store
 
 import { handleInventoryMessage } from './store/inventory.svelte';
+import { applyHealthData, requestHealthData } from './health/health.svelte';
 
 interface InboundMessage {
 	type?: string;
@@ -8,7 +9,13 @@ interface InboundMessage {
 }
 
 function route(type: string, data: unknown) {
+	if (type === 'setHealthData') {
+		applyHealthData(data);
+		return;
+	}
 	handleInventoryMessage(type, data);
+	// refresh the Health & Injuries tab every time the inventory opens
+	if (type === 'APP_SHOW') void requestHealthData();
 }
 
 /** Returns an unsubscribe function */

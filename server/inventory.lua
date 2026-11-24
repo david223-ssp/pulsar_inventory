@@ -499,6 +499,15 @@ end
 
 -- invType==1 isn't always "own inventory" (Search/Rob open invType 1 with the target's SID)
 function validateInventoryAccess(source, owner, invType)
+	-- acesso de uso único dado pelo servidor depois das suas próprias verificações (dar, atirar, apanhar do chão: server/ground_items.lua)
+	if ConsumeTrustedAccess ~= nil and ConsumeTrustedAccess(source, owner, invType) then
+		return true
+	end
+
+	if IsOwnEquipment(source, owner, invType) or IsEquippedBackpackStorage(source, owner, invType) then
+		return true
+	end
+
 	if invType == 1 then
 		local char = plsr.Fetch:CharacterSource(source)
 		if char and tostring(owner) == tostring(char:GetData("SID")) then
@@ -1675,9 +1684,9 @@ function CreateDZIfNotExist(source, coords)
 end
 
 function RegisterCallbacks()
-	plsr.Callbacks:RegisterServerCallback("Inventory:MergeItem", DoMerge)
-	plsr.Callbacks:RegisterServerCallback("Inventory:SwapItem", DoSwap)
-	plsr.Callbacks:RegisterServerCallback("Inventory:MoveItem", DoMove)
+	plsr.Callbacks:RegisterServerCallback("Inventory:MergeItem", EquipmentGuard(DoMerge, "merge"))
+	plsr.Callbacks:RegisterServerCallback("Inventory:SwapItem", EquipmentGuard(DoSwap, "swap"))
+	plsr.Callbacks:RegisterServerCallback("Inventory:MoveItem", EquipmentGuard(DoMove, "move"))
 
 	plsr.Callbacks:RegisterServerCallback("Inventory:Server:DropToGround", function(source, data, cb)
 		local item = data.item
@@ -1697,6 +1706,24 @@ function RegisterCallbacks()
 		if not slotTo then
 			sendRefreshForClient(source, item.ownerFrom, item.invTypeFrom, item.slotFrom)
 			return cb(false)
+		end
+
+		-- itens físicos: o que se larga fica no chão à frente do jogador (server/ground_items.lua)
+		if SetPendingGroundPos ~= nil and Config.GroundItems and Config.GroundItems.Enabled ~= false then
+			local ped = GetPlayerPed(source)
+			if ped ~= 0 then
+				local at = GetEntityCoords(ped)
+				local h = GetEntityHeading(ped)
+				local r = math.rad(h)
+				local ahead = Config.GroundItems.DropAhead or 0.55
+				SetPendingGroundPos(ground.owner, {
+					x = at.x - math.sin(r) * ahead,
+					y = at.y + math.cos(r) * ahead,
+					z = tonumber(ground.position.z) or (at.z - 0.98),
+					h = h,
+					exact = false,
+				})
+			end
 		end
 
 		DoMove(source, {
@@ -1808,6 +1835,9 @@ function RegisterCallbacks()
 			cb(false)
 		end
 	end)
+
+	RegisterHealthCallbacks()
+	RegisterGroundCallbacks()
 
 	plsr.Callbacks:RegisterServerCallback("Inventory:CheckIfNearDropZone", function(source, data, cb)
 		local playerPed = GetPlayerPed(source)
@@ -2108,6 +2138,7 @@ RegisterNetEvent("Inventory:Server:Request", function(secondary)
 			plyrInvData.loaded = true
 			--TriggerClientEvent("Inventory:Client:Cache", src, plyrInvData)
 			TriggerClientEvent("Inventory:Client:Load", src, plyrInvData, benchDetails)
+			SendEquipment(src)
 
 		end
 	else
@@ -2116,6 +2147,7 @@ RegisterNetEvent("Inventory:Server:Request", function(secondary)
 		plyrInvData.loaded = true
 		--TriggerClientEvent("Inventory:Client:Cache", src, plyrInvData)
 		TriggerClientEvent("Inventory:Client:Load", src, plyrInvData, secondary and INVENTORY:GetSecondary(src, secondary.invType, secondary.owner, secondary.class or false, secondary.model or false) or nil)
+		SendEquipment(src)
 	end
 end)
 
@@ -2213,18 +2245,39 @@ end
 local _inUse = {}
 INVENTORY = {
 	CreateDropzone = function(self, routeId, coords)
+		local id = string.format("%s:%s:%s", math.ceil(coords.x), math.ceil(coords.y), routeId)
+
+		-- já registada: não duplicar (os itens no chão contam com uma entrada por id)
+		for _, v in ipairs(_dropzones) do
+			if v.id == id and v.route == routeId then
+				return id
+			end
+		end
+
 		local area = {
-			id = string.format("%s:%s:%s", math.ceil(coords.x), math.ceil(coords.y), routeId),
+			id = id,
 			route = routeId,
 			coords = {
 				x = coords.x,
 				y = coords.y,
 				z = coords.z,
 			},
+			items = GetGroundItemsCached ~= nil and GetGroundItemsCached(id) or {},
 		}
+
+		if SetGroundCenter ~= nil then
+			SetGroundCenter(id, area.coords)
+		end
 
 		table.insert(_dropzones, area)
 		TriggerClientEvent("Inventory:Client:AddDropzone", -1, area)
+
+		-- itens físicos: posições e conteúdo para os clientes (server/ground_items.lua)
+		if RefreshGroundItems ~= nil then
+			CreateThread(function()
+				RefreshGroundItems(id)
+			end)
+		end
 
 		return area.id
 	end,

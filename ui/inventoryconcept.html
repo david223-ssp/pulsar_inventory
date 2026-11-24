@@ -1,0 +1,511 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FiveM Inventory Mockup - Interactive</title>
+    <style>
+        :root {
+            --bg-color: #2b2d35;
+            --panel-bg: rgba(45, 50, 60, 0.45);
+            --panel-border: rgba(255, 255, 255, 0.12);
+            --slot-bg: rgba(255, 255, 255, 0.03);
+            --slot-border: rgba(255, 255, 255, 0.15);
+            --text-main: #e0e0e0;
+            --text-muted: #8b92a5;
+            --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            background-image: radial-gradient(circle at 50% 50%, #3a3f4a 0%, #22242a 100%);
+            color: var(--text-main);
+            font-family: var(--font-family);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        /* Top Bar */
+        .top-bar {
+            display: flex;
+            justify-content: flex-start; /* Changed to left align since logo is gone */
+            align-items: center;
+            padding: 30px 50px 10px 50px;
+        }
+
+        .exit-btn {
+            display: flex;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 20px;
+            padding: 4px 12px 4px 4px;
+            font-size: 12px;
+            border: 1px solid var(--panel-border);
+            color: var(--text-muted);
+        }
+
+        .exit-btn .key {
+            background: white;
+            color: black;
+            font-weight: bold;
+            padding: 2px 8px;
+            border-radius: 12px;
+            margin-right: 8px;
+        }
+
+        /* Main Layout */
+        .inventory-wrapper {
+            display: flex;
+            gap: 20px;
+            padding: 20px 50px;
+            flex: 1;
+            align-items: flex-start;
+        }
+
+        /* Panels */
+        .panel {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 16px;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+
+        .panel-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 500;
+        }
+
+        .panel-title-icon {
+            color: var(--text-muted);
+            font-size: 16px;
+        }
+
+        .panel-subtitle {
+            color: var(--text-muted);
+            font-size: 11px;
+            margin-top: 2px;
+        }
+
+        .weight-info {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        /* Specific Panel Widths */
+        .col-left {
+            width: 340px;
+            height: 100%;
+        }
+
+        .col-center {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            width: 420px;
+        }
+
+        .col-right {
+            width: 420px;
+        }
+
+        /* Slots Grid */
+        .slots-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 8px;
+        }
+
+        .slot {
+            aspect-ratio: 1;
+            background: var(--slot-bg);
+            border: 1px solid var(--slot-border);
+            border-radius: 8px;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: background 0.2s;
+        }
+
+        .slot.drag-over {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: rgba(255, 255, 255, 0.4);
+        }
+
+        .slot-number, .slot-amount {
+            position: absolute;
+            font-size: 10px;
+            color: var(--text-muted);
+            pointer-events: none; /* Prevents text from blocking drops */
+        }
+
+        .slot-number {
+            top: 4px;
+            left: 6px;
+        }
+
+        .slot-amount {
+            bottom: 4px;
+            right: 6px;
+        }
+
+        /* Draggable Items */
+        .item-id {
+            width: 60%;
+            height: 40%;
+            background: #d4d4d4;
+            border-radius: 3px;
+            position: relative;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+            cursor: grab;
+            z-index: 2;
+        }
+        .item-id:active { cursor: grabbing; }
+        
+        .item-id::before {
+            content: '';
+            position: absolute;
+            top: 4px; left: 4px;
+            width: 10px; height: 12px;
+            background: #999;
+        }
+
+        .item-cash {
+            width: 70%;
+            height: 35%;
+            background: #4caf50;
+            border-radius: 2px;
+            position: relative;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            transform: rotate(-10deg);
+            cursor: grab;
+            z-index: 2;
+        }
+        .item-cash:active { cursor: grabbing; }
+
+        .dragging {
+            opacity: 0.5;
+        }
+
+        /* Body Panel Specifics */
+        .body-container {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            flex: 1;
+        }
+
+        .body-slots {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .body-slots .slot {
+            width: 65px;
+            height: 65px;
+        }
+
+        .body-model-blank {
+            flex: 1;
+            margin: 0 10px;
+        }
+
+        .personal-info {
+            border-top: 1px solid var(--panel-border);
+            padding-top: 15px;
+        }
+        
+        .personal-info-title {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .personal-info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .info-block {
+            border-left: 2px solid rgba(255,255,255,0.3);
+            padding-left: 10px;
+        }
+
+        .info-label {
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-bottom: 2px;
+        }
+
+        .info-value {
+            font-size: 12px;
+            color: #fff;
+        }
+
+        /* Backpack specific */
+        .backpack-panel {
+            position: relative;
+            padding-right: 10px; 
+        }
+
+        .scrollbar-track {
+            position: absolute;
+            right: 8px;
+            top: 50px;
+            bottom: 20px;
+            width: 4px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 2px;
+        }
+
+        .scrollbar-thumb {
+            width: 100%;
+            height: 30%;
+            background: rgba(255,255,255,0.2);
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="top-bar">
+        <div class="exit-btn">
+            <div class="key">Exit</div> Escape
+        </div>
+    </div>
+
+    <div class="inventory-wrapper">
+        
+        <div class="panel col-left">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <span class="panel-title-icon">✚</span>
+                    <div>
+                        <div>Body</div>
+                        <div class="panel-subtitle">Wound Information</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="body-container">
+                <div class="body-slots">
+                    <div class="slot"></div>
+                    <div class="slot"></div>
+                    <div class="slot"></div>
+                    <div class="slot"></div>
+                    <div class="slot"></div>
+                </div>
+                
+                <div class="body-model-blank"></div>
+
+                <div class="body-slots">
+                    <div class="slot"><span class="slot-number">1</span></div>
+                    <div class="slot"><span class="slot-number">2</span><div class="item-id" draggable="true"></div></div>
+                    <div class="slot"><span class="slot-number">3</span><div class="item-id" draggable="true"></div></div>
+                    <div class="slot"></div>
+                    <div class="slot"></div>
+                </div>
+            </div>
+
+            <div class="personal-info">
+                <div class="personal-info-title">
+                    <span style="display:inline-block; width:6px; height:6px; background:var(--text-muted); margin-right:5px;"></span>
+                    Personal Information
+                </div>
+                <div class="personal-info-grid">
+                    <div class="info-block">
+                        <div class="info-label">Name</div>
+                        <div class="info-value">Cody Walker</div>
+                    </div>
+                    <div class="info-block">
+                        <div class="info-label">Phone Number</div>
+                        <div class="info-value">310153475</div>
+                    </div>
+                    <div class="info-block">
+                        <div class="info-label">State ID</div>
+                        <div class="info-value">1</div>
+                    </div>
+                    <div class="info-block">
+                        <div class="info-label">Apartment</div>
+                        <div class="info-value">Enter the apartment first</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-center">
+            
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">
+                        <span class="panel-title-icon">👤</span>
+                        <div>Player<div class="panel-subtitle">3.10kg/160.00kg</div></div>
+                    </div>
+                </div>
+                <div class="slots-grid">
+                    <div class="slot"><span class="slot-number">1</span><div class="item-id" draggable="true"></div></div>
+                    <div class="slot"><span class="slot-number">2</span></div>
+                    <div class="slot"><span class="slot-number">3</span></div>
+                    <div class="slot"><span class="slot-number">4</span></div>
+                    <div class="slot"><span class="slot-number">5</span></div>
+                    
+                    <div class="slot"></div>
+                    <div class="slot"></div>
+                    <div class="slot"></div>
+                    <div class="slot"></div>
+                    <div class="slot"></div>
+                    
+                    <div class="slot"></div>
+                    <div class="slot"></div>
+                    <div class="slot">
+                        <div class="item-cash" draggable="true"></div>
+                        <span class="slot-amount">7920</span>
+                    </div>
+                    <div class="slot"></div>
+                    <div class="slot"></div>
+                </div>
+            </div>
+
+            <div class="panel backpack-panel">
+                <div class="panel-header">
+                    <div class="panel-title">
+                        <span class="panel-title-icon">🎒</span>
+                        <div>Backpack</div>
+                    </div>
+                    <div class="weight-info">0.00kg/1000.00kg</div>
+                </div>
+                <div class="slots-grid" style="padding-right: 15px;">
+                    <div class="slot"><span class="slot-number">1</span><div class="item-id" draggable="true"></div></div>
+                    <div class="slot"></div>
+                    <div class="slot"></div>
+                    <div class="slot"></div>
+                    <div class="slot"></div>
+                    
+                    <div class="slot"></div>
+                    <div class="slot"></div>
+                    <div class="slot"></div>
+                    <div class="slot"></div>
+                    <div class="slot"></div>
+                    
+                    <div class="slot"></div>
+                    <div class="slot"></div>
+                    <div class="slot"></div>
+                    <div class="slot"></div>
+                    <div class="slot"></div>
+                </div>
+                
+                <div class="scrollbar-track">
+                    <div class="scrollbar-thumb"></div>
+                </div>
+            </div>
+            
+        </div>
+
+        <div class="col-right">
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">
+                        <span class="panel-title-icon">🌿</span>
+                        <div>Ground<div class="panel-subtitle">0.00kg/1000.00kg</div></div>
+                    </div>
+                </div>
+                <div class="slots-grid">
+                    <div class="slot"></div>
+                    <div class="slot"></div>
+                    <div class="slot"></div>
+                    <div class="slot"></div>
+                    <div class="slot"></div>
+                    
+                    <div class="slot"></div>
+                    <div class="slot"></div>
+                    <div class="slot"></div>
+                    <div class="slot"></div>
+                    <div class="slot"></div>
+                    
+                    <div class="slot"></div>
+                    <div class="slot"></div>
+                    <div class="slot"></div>
+                    <div class="slot"></div>
+                    <div class="slot"></div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const draggables = document.querySelectorAll('.item-id, .item-cash');
+            const slots = document.querySelectorAll('.slot');
+
+            draggables.forEach(draggable => {
+                draggable.addEventListener('dragstart', () => {
+                    draggable.classList.add('dragging');
+                });
+
+                draggable.addEventListener('dragend', () => {
+                    draggable.classList.remove('dragging');
+                });
+            });
+
+            slots.forEach(slot => {
+                slot.addEventListener('dragover', e => {
+                    e.preventDefault(); // Necessary to allow dropping
+                    slot.classList.add('drag-over');
+                });
+
+                slot.addEventListener('dragleave', () => {
+                    slot.classList.remove('drag-over');
+                });
+
+                slot.addEventListener('drop', e => {
+                    e.preventDefault();
+                    slot.classList.remove('drag-over');
+                    
+                    const draggedElement = document.querySelector('.dragging');
+                    
+                    if (draggedElement) {
+                        // Check if the slot already has an item to prevent stacking items inside each other
+                        const existingItem = slot.querySelector('.item-id, .item-cash');
+                        
+                        if (!existingItem) {
+                            slot.appendChild(draggedElement);
+                        } else {
+                            // If slot is full, you could implement a swapping logic here in the future
+                            console.log("Slot is already occupied!");
+                        }
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>

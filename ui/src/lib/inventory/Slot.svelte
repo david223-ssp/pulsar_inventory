@@ -4,13 +4,16 @@
 	import { attemptDrop, cartQtyFor, dragState, getPane, hoverTooltipState, isUsable, itemDataFor, pickUp, playerPane, quickTransfer, setCartQty, useItemAt } from '../store/inventory.svelte';
 	import { Nui } from '../nui';
 	import { getItemImage, getItemLabel } from '../util/itemImage';
+	import { formatWeight } from '../util/weight';
 	import { calcDurability } from '../util/durability';
 	import { formatShopPrice, getRarityBorderColor, getRarityColor } from '../../config';
 	import Icon from '../Icon.svelte';
 	import SplitPopover from './SplitPopover.svelte';
+	import { contextMenuState, isFavourite, openContextMenu } from '../menu/menuState.svelte';
+	import TablerIcon from '../menu/TablerIcon.svelte';
 	import type { InventorySlotItem, PaneId } from '../types';
 
-	let { pane, slotNumber, item }: { pane: PaneId; slotNumber: number; item: InventorySlotItem | null } = $props();
+	let { pane, slotNumber, item, showNumber = false }: { pane: PaneId; slotNumber: number; item: InventorySlotItem | null; showNumber?: boolean } = $props();
 
 	const paneState = $derived(getPane(pane));
 	const shopMode = $derived(!!paneState.shop);
@@ -21,6 +24,8 @@
 	const durabilityFilled = $derived(durability != null ? Math.max(1, Math.ceil((durability / 100) * DURABILITY_TICKS)) : 0);
 	const durabilityColor = $derived(durability == null ? '' : durability >= 60 ? 'var(--color-success)' : durability >= 25 ? 'var(--color-warning)' : 'var(--color-error)');
 	const disabled = $derived(!!paneState.disabled[slotNumber]);
+	const rarityColor = $derived(item && itemData && !broken && !shopMode ? getRarityBorderColor(itemData.rarity) : undefined);
+	const stackWeight = $derived(item && itemData ? formatWeight(itemData.weight * item.Count) : '');
 
 	const usable = $derived(item ? isUsable(pane, item) : false);
 	const holding = $derived(!!dragState.origin);
@@ -73,6 +78,7 @@
 			isEligible: !weaponLocked,
 			isQualified: !qualiLocked,
 			rect: { top: r.top, bottom: r.bottom, left: r.left, right: r.right, width: r.width },
+			pane,
 		};
 		return () => {
 			if (hoverTooltipState.info?.item === item) hoverTooltipState.info = null;
@@ -113,10 +119,26 @@
 		}
 	}
 
-	// Right-click: Ctrl = single unit, Shift = split popover, plain = half stack
+	// the context menu's "Split Stack" lands here
+	$effect(() => {
+		const req = contextMenuState.splitRequest;
+		if (!req || req.pane !== pane || req.slot !== slotNumber || !item) return;
+		contextMenuState.splitRequest = null;
+		if (hoverTooltipState.info?.item === item) hoverTooltipState.info = null;
+		splitOpen = true;
+	});
+
+	// Right-click: plain = item menu on your own pockets/backpack (like ox_inventory), half stack elsewhere;
+	// Ctrl = single unit, Shift = split popover
 	function onContextMenu(e: MouseEvent) {
 		e.preventDefault();
 		if (locked || holding || shopMode || !item) return;
+
+		if (!e.ctrlKey && !e.shiftKey && (pane === 'player' || pane === 'backpack')) {
+			if (hoverTooltipState.info?.item === item) hoverTooltipState.info = null;
+			openContextMenu(pane, item, e.clientX, e.clientY);
+			return;
+		}
 
 		if (e.ctrlKey || !itemData?.isStackable) {
 			pickUp(pane, item, 1);
@@ -140,7 +162,8 @@
 	class:locked
 	class:drag-source={isDragSource}
 	class:split-open={splitOpen}
-	style:border-color={item && itemData && !broken && !shopMode ? getRarityBorderColor(itemData.rarity) : undefined}
+	class:rarity={!!rarityColor}
+	style:--slot-color={rarityColor}
 	onmousedown={onMouseDown}
 	onmouseup={onMouseUp}
 	oncontextmenu={onContextMenu}
@@ -185,12 +208,13 @@
 			</div>
 		{:else}
 			<div class="image" class:in-flight={inFlight}><img src={getItemImage(item, itemData)} alt="" loading="lazy" /></div>
+			<div class="count" class:in-flight={inFlight}>{item.Count}x</div>
 			<div class="label" class:in-flight={inFlight}>
 				<span class="name">{getItemLabel(item, itemData)}</span>
+				{#if stackWeight}
+					<span class="weight">{stackWeight}</span>
+				{/if}
 			</div>
-			{#if item.Count > 1}
-				<div class="count" class:in-flight={inFlight}>{item.Count}</div>
-			{/if}
 		{/if}
 
 		{#if !shopMode && itemData.durability && item.CreateDate && !broken && durability != null}
@@ -213,34 +237,66 @@
 			</div>
 		{/if}
 	{/if}
+	{#if showNumber && !shopMode}
+		<span class="number">{slotNumber}</span>
+	{/if}
+	{#if item && !shopMode && isFavourite(item.Name)}
+		<span class="favourite" title="Favourite"><TablerIcon name="star" /></span>
+	{/if}
 </div>
 
 <style>
+	/* 1 design px = var(--u); see theme.css */
 	.slot {
+		--slot-color: #ffffff;
 		position: relative;
-		width: 4.6vw;
-		height: 9.5vh;
-		min-width: 58px;
-		min-height: 58px;
-		border: 1px solid rgba(255, 255, 255, 0.08);
-		border-radius: 2px;
-		background: rgba(32, 34, 45, 0.75);
-		box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4), inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+		width: 100%;
+		height: 100%;
+		border: calc(var(--u) * 2) solid var(--glass-border);
+		border-radius: calc(var(--u) * 8);
+		background: var(--glass-bg);
 		cursor: pointer;
 		overflow: visible;
-		transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+		transition: transform 120ms ease, border-color 120ms ease;
+	}
+
+	.slot.rarity {
+		border-color: var(--slot-color);
+	}
+
+	/* outer + inner glow tinted by the rarity color; split into pseudo-elements so a CSS-var color can be faded with opacity */
+	.slot::before,
+	.slot::after {
+		content: '';
+		position: absolute;
+		pointer-events: none;
+		border-radius: inherit;
+	}
+
+	.slot::before {
+		inset: calc(var(--u) * -2);
+		box-shadow: 0 0 calc(var(--u) * 25) 0 var(--slot-color), 0 0 calc(var(--u) * 40) 0 var(--slot-color);
+		opacity: 0.08;
+	}
+
+	.slot.rarity::before {
+		opacity: 0.16;
+	}
+
+	.slot::after {
+		inset: 0;
+		box-shadow: inset 0 0 calc(var(--u) * 30) 0 var(--slot-color), inset 0 0 calc(var(--u) * 20) 0 var(--slot-color);
+		opacity: 0.12;
 	}
 
 	.slot.empty {
-		border-color: rgba(255, 255, 255, 0.05);
-		background: rgba(18, 19, 25, 0.4);
-		box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.35);
 		cursor: default;
 	}
 
 	.slot.broken {
-		background: rgba(220, 53, 69, 0.18);
-		border-color: rgba(220, 53, 69, 0.4);
+		--slot-color: var(--color-error);
+		border-color: rgba(220, 53, 69, 0.6);
+		background: rgba(80, 20, 25, 0.55);
 	}
 
 	.slot.locked {
@@ -254,10 +310,49 @@
 
 	/* no transform while split-open: transform on this element would make it the containing
 	   block for the popover's fixed backdrop, so it'd stop covering the full screen */
-	.slot:not(.empty):not(.locked):not(.split-open):hover {
-		transform: translateY(-2px);
-		border-color: rgba(255, 255, 255, 0.18);
-		box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 14px rgba(0, 0, 0, 0.35);
+	.slot:not(.empty):not(.locked):not(.split-open):not(.shop):hover {
+		transform: translateY(calc(var(--u) * -2));
+	}
+
+	.slot:not(.empty):not(.rarity):not(.shop):hover {
+		border-color: #bdbdbd;
+	}
+
+	.favourite {
+		position: absolute;
+		top: calc(var(--u) * 16);
+		right: calc(var(--u) * 3);
+		width: calc(var(--u) * 10);
+		height: calc(var(--u) * 10);
+		color: var(--color-primary-light);
+		pointer-events: none;
+		z-index: 1;
+	}
+
+	.favourite :global(svg) {
+		width: 100%;
+		height: 100%;
+		fill: currentColor;
+	}
+
+	.number {
+		position: absolute;
+		top: 0;
+		left: 0;
+		height: calc(var(--u) * 16);
+		padding: calc(var(--u) * 3);
+		display: flex;
+		align-items: center;
+		border: calc(var(--u) * 1) solid rgba(255, 255, 255, 0.3);
+		border-radius: calc(var(--u) * 6) 0 calc(var(--u) * 8) 0;
+		background: var(--slot-badge-bg);
+		box-shadow: 0 calc(var(--u) * 2) calc(var(--u) * 4) rgba(0, 0, 0, 0.2);
+		font-size: calc(var(--u) * 9);
+		font-weight: 600;
+		line-height: 1;
+		color: var(--slot-badge-text);
+		pointer-events: none;
+		z-index: 1;
 	}
 
 	.image {
@@ -275,19 +370,22 @@
 	}
 
 	.image img {
-		max-width: 65%;
-		max-height: 65%;
+		max-width: 62%;
+		max-height: 58%;
 		object-fit: contain;
 	}
 
 	.label {
 		position: absolute;
-		bottom: 0;
-		left: 0;
-		right: 0;
-		text-align: center;
-		padding: 0.5vh 0.2vw;
-		background: linear-gradient(to top, rgba(0, 0, 0, 0.78) 0%, rgba(0, 0, 0, 0) 100%);
+		left: calc(var(--u) * 3);
+		right: calc(var(--u) * 3);
+		bottom: calc(var(--u) * 3);
+		display: flex;
+		align-items: flex-end;
+		justify-content: space-between;
+		gap: calc(var(--u) * 4);
+		font-weight: 600;
+		color: var(--slot-text);
 		opacity: 1;
 		transition: opacity 200ms ease;
 	}
@@ -297,25 +395,28 @@
 	}
 
 	.label .name {
-		width: 100%;
-		font-size: 0.85vmin;
-		font-weight: 500;
-		color: var(--color-text);
+		min-width: 0;
+		font-size: calc(var(--u) * 9);
+		line-height: calc(var(--u) * 11);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
 
+	.label .weight {
+		flex-shrink: 0;
+		font-size: calc(var(--u) * 8);
+		line-height: 1;
+	}
+
 	.count {
 		position: absolute;
-		top: 0.4vh;
-		right: 0.3vw;
-		padding: 0.15vh 0.35vw;
-		font-size: 0.9vmin;
+		top: calc(var(--u) * 3);
+		right: calc(var(--u) * 4);
+		font-size: calc(var(--u) * 9);
 		font-weight: 600;
-		color: var(--color-text);
-		background: rgba(0, 0, 0, 0.5);
-		border-radius: 4px;
+		line-height: 1;
+		color: var(--slot-text);
 		opacity: 1;
 		transition: opacity 200ms ease;
 	}
@@ -326,17 +427,17 @@
 
 	.durability-meter {
 		position: absolute;
-		bottom: 2.6vh;
+		bottom: calc(var(--u) * 16);
 		left: 0;
 		width: 100%;
 		display: flex;
-		gap: 1.5px;
-		padding: 0 0.3vw;
+		gap: calc(var(--u) * 2);
+		padding: 0 calc(var(--u) * 4);
 	}
 
 	.tick {
 		flex: 1;
-		height: 3px;
+		height: calc(var(--u) * 2);
 		border-radius: 1px;
 		background: rgba(0, 0, 0, 0.35);
 		transition: background 200ms ease;
@@ -350,9 +451,9 @@
 		position: absolute;
 		inset: 0;
 		margin: auto;
-		width: 2vh;
-		height: 2vh;
-		border: 2px solid rgba(139, 92, 246, 0.25);
+		width: calc(var(--u) * 22);
+		height: calc(var(--u) * 22);
+		border: calc(var(--u) * 2) solid rgba(139, 92, 246, 0.25);
 		border-top-color: var(--color-primary);
 		border-radius: 50%;
 		animation: spin 700ms linear infinite;
@@ -366,6 +467,7 @@
 		justify-content: center;
 		color: var(--color-primary-light);
 		background: rgba(0, 0, 0, 0.35);
+		border-radius: inherit;
 	}
 
 	.confirm-icon {
@@ -396,28 +498,19 @@
 		top: 100%;
 		left: 50%;
 		transform: translateX(-50%);
-		margin-top: 0.6vh;
+		margin-top: calc(var(--u) * 8);
 		z-index: 210;
 	}
 
 	.slot.shop {
-		width: 7.6vw;
-		height: 17.4vh;
-		min-width: 106px;
-		min-height: 172px;
 		display: flex;
 		flex-direction: column;
-		background: rgba(28, 29, 38, 0.85);
-		border-color: rgba(255, 255, 255, 0.09);
 		cursor: default;
 	}
 
 	/* no lift-on-hover, shop cards aren't click/drag targets */
-	.slot.shop:hover,
-	.slot.shop:not(.empty):not(.locked):hover {
-		transform: none;
-		border-color: rgba(255, 255, 255, 0.2);
-		box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4), inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+	.slot.shop:hover {
+		border-color: #bdbdbd;
 	}
 
 	.shop-icon-wrap {

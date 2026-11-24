@@ -1,23 +1,28 @@
-<!-- Full-viewport backdrop + centered content box. Left-click drops held item on ground, right-click cancels -->
+<!-- Full-viewport click layer + the scaled 2146x1207 design canvas.
+     Clicking anywhere that isn't a panel ([data-panel]) while holding an item drops it on the ground; right-click cancels -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { catalogState, cancelDrag, dragState, dropHeldToGround, uiState } from './store/inventory.svelte';
 
 	let { children }: { children: Snippet } = $props();
 
-	function onBackdropClick() {
-		if (dragState.origin) dropHeldToGround();
+	function outsidePanels(e: MouseEvent): boolean {
+		return !(e.target as Element | null)?.closest?.('[data-panel]');
+	}
+
+	function onBackdropClick(e: MouseEvent) {
+		if (dragState.origin && outsidePanels(e)) dropHeldToGround();
 	}
 
 	function onBackdropContextMenu(e: MouseEvent) {
 		e.preventDefault();
-		if (dragState.origin) cancelDrag();
+		if (dragState.origin && outsidePanels(e)) cancelDrag();
 	}
 </script>
 
 {#if catalogState.itemsLoaded && !uiState.hidden}
 	<div class="backdrop" onclick={onBackdropClick} oncontextmenu={onBackdropContextMenu} onkeydown={() => {}} role="presentation">
-		<div class="content" onclick={(e) => e.stopPropagation()} oncontextmenu={(e) => e.stopPropagation()} role="presentation">
+		<div class="canvas">
 			{@render children()}
 		</div>
 	</div>
@@ -27,17 +32,15 @@
 	.backdrop {
 		position: absolute;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.75);
-		display: flex;
-		align-items: center;
-		justify-content: center;
 		pointer-events: auto;
 	}
 
-	.content {
-		width: fit-content;
-		max-width: 90vw;
-		height: 60vh;
-		max-height: 720px;
+	/* never transformed: a transform here would break the split popover's fixed-position backdrop */
+	.canvas {
+		position: absolute;
+		inset: 0;
+		margin: auto;
+		width: calc(var(--u) * 2146);
+		height: calc(var(--u) * 1207);
 	}
 </style>

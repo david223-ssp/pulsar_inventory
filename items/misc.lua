@@ -167,17 +167,40 @@ _itemsSource["misc"] = {
 		name = "phone",
 		label = "Phone",
 		price = 100,
-		isUsable = false,
+		isUsable = false, -- sem botão "Usar"; a bandeja abre-se pelo "Open SIM Tray"
 		isRemoved = true,
+		isStackable = false,
+		isDestroyed = false,
+		-- type 10 + container: o telemóvel tem uma bandeja de 1 espaço para o
+		-- cartão SIM (server/data/entitys.lua, id 302). O pulsar_phone lê o
+		-- cartão que lá estiver.
+		type = 10,
+		container = 302,
+		containerLabel = "Open SIM Tray", -- entrada no menu do botão direito
+		rarity = 1,
+		closeUi = false,
+		metalic = false,
+		state = "PHONE",
+		weight = 1,
+		durability = (60 * 60 * 24 * 21),
+	},
+	{
+		-- pulsar_phone: usar o cartão insere-o no telemóvel. A metadata guarda o
+		-- número (SimNumber) e a série (SimSerial); um cartão em branco é
+		-- registado a quem o usa primeiro. Nunca empilhável: cada cartão é um número.
+		name = "simcard",
+		label = "SIM Card",
+		description = "Usa para inserir no telemóvel",
+		price = 50,
+		isUsable = true,
+		isRemoved = false,
 		isStackable = false,
 		isDestroyed = false,
 		type = 18,
 		rarity = 1,
 		closeUi = true,
 		metalic = false,
-		state = "PHONE",
-		weight = 1,
-		durability = (60 * 60 * 24 * 21),
+		weight = 0.1,
 	},
 	{
 		name = "gps",

@@ -4,7 +4,7 @@ import { FALLBACK_ITEM, CHANGE_ALERT_DURATION_MS, CHANGE_ALERTS_MAX, HOTBAR_AUTO
 import { Nui } from '../nui';
 import { parseMetaData } from '../util/metadata';
 import dragSfxUrl from '../../assets/drag.mp3';
-import type { ChangeAlert, Cooldowns, InventorySettings, InventorySlotItem, ItemDefinition, MoveSlotPayload, PaneId, PaneState, Recipe } from '../types';
+import type { ChangeAlert, Cooldowns, EquipmentSlotId, InventorySettings, InventorySlotItem, InventoryTab, ItemDefinition, MoveSlotPayload, PaneId, PaneState, Recipe } from '../types';
 
 // Plays on every completed drag and quick-transfer
 const dragSfx = new Audio(dragSfxUrl);
@@ -45,10 +45,87 @@ export const uiState = $state({
 	settings: { muted: false, useBank: false } as InventorySettings,
 	inUse: false,
 	showSecondary: false,
+	showBackpack: false,
+	/** Which top-nav tab is showing; purely a view concern, `mode` still drives Lua-facing behaviour */
+	tab: 'inventory' as InventoryTab,
+	/** Per-pane "collapsed" toggle from the chevron button in each pane header */
+	collapsed: { player: false, secondary: false, backpack: false, equipment: false } as Record<PaneId, boolean>,
 });
+
+export const TABS: { id: InventoryTab; label: string }[] = [
+	{ id: 'inventory', label: 'INVENTORY' },
+	{ id: 'health', label: 'HEALTH & INJURIES' },
+	{ id: 'crafting', label: 'CRAFTING' },
+	{ id: 'experience', label: 'EXPERIENCE' },
+];
+
+export function setTab(tab: InventoryTab): void {
+	uiState.tab = tab;
+}
+
+// Q/E cycling, wraps around at both ends
+export function cycleTab(dir: 1 | -1): void {
+	const i = TABS.findIndex((t) => t.id === uiState.tab);
+	uiState.tab = TABS[(i + dir + TABS.length) % TABS.length].id;
+}
+
+export function togglePaneCollapsed(pane: PaneId): void {
+	uiState.collapsed = { ...uiState.collapsed, [pane]: !uiState.collapsed[pane] };
+}
 
 export const playerPane = $state<PaneState>(emptyPane());
 export const secondaryPane = $state<PaneState>(emptyPane());
+// The worn backpack's own storage, listed under the player pane (optional, sent via SET_BACKPACK_INVENTORY)
+export const backpackPane = $state<PaneState>(emptyPane());
+
+// The character's equipment, a real inventory (owner = SID, invType = Config.Equipment.invType) sent via SET_EQUIPMENT_INVENTORY.
+// `slot` must match the Lua slot numbers; `accepts` mirrors Config.Equipment.slots - slots without one are display-only
+export interface EquipmentSlotDef {
+	id: EquipmentSlotId;
+	label: string;
+	slot: number;
+	accepts?: (item: ItemDefinition) => boolean;
+}
+
+export const BACKPACK_EQUIP_SLOT = 1;
+
+export const EQUIPMENT_SLOTS: EquipmentSlotDef[] = [
+	{ id: 'backpack', label: 'BACKPACK', slot: BACKPACK_EQUIP_SLOT, accepts: (i) => !!i.backpack && i.container != null },
+	{ id: 'armor', label: 'BODY ARMOR', slot: 2 },
+	{ id: 'phone', label: 'PHONE', slot: 3 },
+	{ id: 'parachute', label: 'PARACHUTE', slot: 4 },
+	{ id: 'wallet', label: 'WALLET', slot: 5 },
+	{ id: 'key', label: 'KEY', slot: 6 },
+];
+
+export const equipmentPane = $state<PaneState>(emptyPane());
+
+export const equipmentState = $state({
+	/** Optional keybind hint per slot, e.g. { phone: 'M' } (SET_EQUIPMENT) */
+	keybinds: {} as Partial<Record<EquipmentSlotId, string>>,
+});
+
+export function equipSlotDef(slot: number): EquipmentSlotDef | undefined {
+	return EQUIPMENT_SLOTS.find((s) => s.slot === slot);
+}
+
+export function equipSlotAccepts(slot: number, itemName: string): boolean {
+	const def = equipSlotDef(slot);
+	const data = itemDataFor(itemName);
+	return !!def?.accepts && !data.invalid && def.accepts(data);
+}
+
+// The backpack pane only belongs on screen while its backpack is in the slot; the server re-sends it on equip
+function syncBackpackWithSlot(): void {
+	const worn = findSlotItem(equipmentPane, BACKPACK_EQUIP_SLOT);
+	const container = worn ? parseMetaData(worn.MetaData).Container : undefined;
+	if (!worn || (backpackPane.owner && backpackPane.owner !== `container:${container}`)) {
+		uiState.showBackpack = false;
+	}
+}
+
+// Lets the dev mock fake the server's equipment push after a move (Lua does it for real via Inventory:Client:Equipment)
+export const devHooks = { equipmentChanged: null as null | (() => void) };
 
 export const hotbarState = $state({
 	showHotbar: false,
@@ -86,6 +163,8 @@ export interface HoverTooltipInfo {
 	isEligible: boolean;
 	isQualified: boolean;
 	rect: { top: number; bottom: number; left: number; right: number; width: number };
+	/** which pane the hovered item is in, for the tooltip's "Pockets / Ground / Shop" context */
+	pane?: PaneId;
 }
 
 export const hoverTooltipState = $state({ info: null as HoverTooltipInfo | null });
@@ -110,10 +189,13 @@ export const dragState = $state({
 });
 
 export function getPane(id: PaneId): PaneState {
-	return id === 'player' ? playerPane : secondaryPane;
+	if (id === 'player') return playerPane;
+	if (id === 'backpack') return backpackPane;
+	if (id === 'equipment') return equipmentPane;
+	return secondaryPane;
 }
 
-function findSlotItem(pane: PaneState, slot: number): InventorySlotItem | null {
+export function findSlotItem(pane: PaneState, slot: number): InventorySlotItem | null {
 	return pane.inventory.find((i) => i?.Slot === slot) ?? null;
 }
 
@@ -151,6 +233,7 @@ export function handleInventoryMessage(type: string, data: unknown): void {
 			break;
 		case 'APP_HIDE':
 			uiState.hidden = true;
+			uiState.tab = uiState.mode === 'crafting' ? 'crafting' : 'inventory';
 			dragState.origin = null;
 			dragState.held = null;
 			cartState.lines = [];
@@ -158,6 +241,11 @@ export function handleInventoryMessage(type: string, data: unknown): void {
 			break;
 		case 'SET_MODE':
 			uiState.mode = d.mode;
+			uiState.tab = d.mode === 'crafting' ? 'crafting' : 'inventory';
+			break;
+		// Optional: lets Lua open straight onto a tab ({ tab: 'health' })
+		case 'SET_TAB':
+			if (TABS.some((t) => t.id === d.tab)) uiState.tab = d.tab;
 			break;
 		case 'UPDATE_SETTINGS':
 			uiState.settings = { ...uiState.settings, ...d.settings };
@@ -190,10 +278,37 @@ export function handleInventoryMessage(type: string, data: unknown): void {
 			secondaryPane.disabled = { ...secondaryPane.disabled, [d.slot]: false };
 			break;
 
+		// Optional: the worn backpack's storage, same PaneState shape as SET_SECONDARY_INVENTORY
+		case 'SET_BACKPACK_INVENTORY':
+			replacePane(backpackPane, d as PaneState, backpackPane.owner === d.owner && backpackPane.invType === d.invType);
+			uiState.showBackpack = true;
+			break;
+		case 'SET_BACKPACK_SLOT':
+			backpackPane.disabled = { ...backpackPane.disabled, [d.slot]: false };
+			break;
+		case 'HIDE_BACKPACK_INVENTORY':
+			uiState.showBackpack = false;
+			replacePane(backpackPane, {}, false);
+			break;
+
+		// The equipment inventory (Inventory:Client:Equipment), same PaneState shape as the other panes
+		case 'SET_EQUIPMENT_INVENTORY':
+			replacePane(equipmentPane, d as PaneState, equipmentPane.owner === d.owner);
+			syncBackpackWithSlot();
+			break;
+		case 'SET_EQUIPMENT_SLOT':
+			equipmentPane.disabled = { ...equipmentPane.disabled, [d.slot]: false };
+			break;
+		// Optional: { keybinds: { phone: 'M' } }
+		case 'SET_EQUIPMENT':
+			if (d.keybinds) equipmentState.keybinds = d.keybinds;
+			break;
+
 		// resync after a failed shop purchase, merges onto current pane state and keeps `disabled`
 		case 'SET_INVENTORIES':
 			if (d.player) Object.assign(playerPane, d.player, { invType: 1, disabled: playerPane.disabled });
 			if (d.secondary) Object.assign(secondaryPane, d.secondary, { disabled: secondaryPane.disabled });
+			if (d.backpack) Object.assign(backpackPane, d.backpack, { disabled: backpackPane.disabled });
 			break;
 
 		case 'HOTBAR_SHOW':
@@ -210,6 +325,7 @@ export function handleInventoryMessage(type: string, data: unknown): void {
 
 		case 'SET_BENCH':
 			uiState.mode = 'crafting';
+			uiState.tab = 'crafting';
 			craftingState.bench = d.bench;
 			craftingState.cooldowns = d.cooldowns ?? {};
 			craftingState.recipes = d.recipes ?? [];
@@ -248,6 +364,9 @@ export function dismissChangeAlert(id: number): void {
 export function resetInventoryView(): void {
 	replacePane(playerPane, {}, true);
 	replacePane(secondaryPane, {}, true);
+	replacePane(backpackPane, {}, false);
+	replacePane(equipmentPane, {}, false);
+	uiState.showBackpack = false;
 }
 
 export function hideSecondaryInventory(): void {
@@ -283,6 +402,12 @@ export function dropHeldToGround(): void {
 	const origin = dragState.origin;
 	const held = dragState.held;
 	if (!origin || !held) return;
+
+	// unequip into a pane first, the ground-drop path doesn't re-send the equipment state
+	if (origin.pane === 'equipment') {
+		void Nui.frontEndSound('DISABLED');
+		return;
+	}
 
 	const pane = getPane(origin.pane);
 	if (!pane.shop) {
@@ -440,6 +565,17 @@ export function attemptDrop(destPaneId: PaneId, destSlot: number): void {
 		return;
 	}
 
+	// equipment slots only take what they're made for; a swap sends the occupant back into the origin slot
+	const equipBlocked =
+		(destPaneId === 'equipment' && !equipSlotAccepts(destSlot, held.Name)) ||
+		(origin.pane === 'equipment' && !!destItem && destItem.Name !== origin.item.Name && !equipSlotAccepts(origin.slot, destItem.Name)) ||
+		// the worn backpack can't go into its own storage
+		(origin.pane === 'equipment' && origin.slot === BACKPACK_EQUIP_SLOT && destPaneId === 'backpack');
+	if (equipBlocked) {
+		void Nui.frontEndSound('DISABLED');
+		return;
+	}
+
 	if (destPaneId === 'secondary' && destPane.shop) {
 		void Nui.frontEndSound('DISABLED');
 		return;
@@ -458,7 +594,7 @@ export function attemptDrop(destPaneId: PaneId, destSlot: number): void {
 	const heldItemData = itemDataFor(held.Name);
 	const heldWeight = (heldItemData.weight ?? 0) * held.Count;
 
-	if (origin.pane !== destPaneId) {
+	if (origin.pane !== destPaneId && destPaneId !== 'equipment') {
 		const destWeight = calcPaneWeight(destPane) + heldWeight;
 		if (destWeight > destPane.capacity) {
 			void Nui.frontEndSound('DISABLED');
@@ -511,6 +647,11 @@ export function attemptDrop(destPaneId: PaneId, destSlot: number): void {
 	else if (kind === 'swap') void Nui.swapSlot(payload);
 	else void Nui.moveSlot({ ...payload, isSplit: kind === 'split' });
 
+	if (origin.pane === 'equipment' || destPaneId === 'equipment') {
+		syncBackpackWithSlot();
+		devHooks.equipmentChanged?.();
+	}
+
 	cancelDrag();
 }
 
@@ -559,9 +700,17 @@ function applyOptimisticMove(originId: PaneId, destId: PaneId, originSlot: numbe
 
 // Shift-click quick-transfer: finds the first matching stack (or empty slot) in the other pane and moves instantly
 export function quickTransfer(originPaneId: PaneId, item: InventorySlotItem): void {
-	const destPaneId: PaneId = originPaneId === 'player' ? 'secondary' : 'player';
+	// shift-clicking a backpack while the backpack slot is free equips it
+	if (originPaneId === 'player' && equipmentPane.loaded && equipSlotAccepts(BACKPACK_EQUIP_SLOT, item.Name) && !findSlotItem(equipmentPane, BACKPACK_EQUIP_SLOT)) {
+		pickUp(originPaneId, item, item.Count);
+		attemptDrop('equipment', BACKPACK_EQUIP_SLOT);
+		return;
+	}
+
+	// player -> open secondary (else the backpack); secondary/backpack/equipment -> player
+	const destPaneId: PaneId | null = originPaneId !== 'player' ? 'player' : uiState.showSecondary ? 'secondary' : uiState.showBackpack ? 'backpack' : null;
+	if (!destPaneId) return;
 	const destPane = getPane(destPaneId);
-	if (!uiState.showSecondary) return;
 	if (destPaneId === 'secondary' && destPane.shop) {
 		void Nui.frontEndSound('DISABLED');
 		return;
@@ -626,6 +775,58 @@ export function isUsable(pane: PaneId, item: InventorySlotItem | null | undefine
 
 export function useItemAt(pane: PaneId, item: InventorySlotItem): void {
 	if (!isUsable(pane, item)) {
+		void Nui.frontEndSound('DISABLED');
+		return;
+	}
+	const p = getPane(pane);
+	void Nui.useItem(p.owner, item.Slot, p.invType);
+	p.disabled = { ...p.disabled, [item.Slot]: true };
+}
+
+// "Give" (client/give.lua): the item goes in the player's hand; E hands it over, left click throws it, X cancels.
+// Only from the player's own pockets (invType 1), the only place the server takes a give or a throw from.
+export function canGive(pane: PaneId, item: InventorySlotItem | null | undefined): boolean {
+	if (!item || pane !== 'player') return false;
+	if (uiState.mode !== 'inventory' || uiState.inUse) return false;
+	const p = getPane(pane);
+	if (p.owner !== playerPane.owner || p.invType !== 1) return false;
+	return !itemDataFor(item.Name).invalid;
+}
+
+export function giveItemAt(pane: PaneId, item: InventorySlotItem, count: number = item.Count): void {
+	if (!canGive(pane, item)) {
+		void Nui.frontEndSound('DISABLED');
+		return;
+	}
+	const amount = count > 0 && count < item.Count ? count : item.Count;
+	void Nui.startGiveMode({ slot: item.Slot, count: amount, name: item.Name });
+}
+
+// "Place" (client/place.lua): a see-through copy of the item follows the camera; E puts it there, C cancels.
+// Same rules as give: only from the player's own pockets.
+export function placeItemAt(pane: PaneId, item: InventorySlotItem, count: number = item.Count): void {
+	if (!canGive(pane, item)) {
+		void Nui.frontEndSound('DISABLED');
+		return;
+	}
+	const amount = count > 0 && count < item.Count ? count : item.Count;
+	void Nui.startPlaceMode({ slot: item.Slot, count: amount, name: item.Name });
+}
+
+// a container item with a containerLabel opens from its right-click entry even with isUsable = false (no "Use"
+// tile) - the server registers every type 10 item as usable, so the same use request opens the storage
+export function canOpenContainer(pane: PaneId, item: InventorySlotItem | null | undefined): boolean {
+	if (!item) return false;
+	const itemData = itemDataFor(item.Name);
+	if (!itemData.container || !itemData.containerLabel) return false;
+	if (uiState.mode !== 'inventory' || itemData.invalid || uiState.inUse) return false;
+	if (getPane(pane).owner !== playerPane.owner) return false;
+	if (itemData.durability && item.CreateDate + itemData.durability <= Date.now() / 1000) return false;
+	return true;
+}
+
+export function openContainerAt(pane: PaneId, item: InventorySlotItem): void {
+	if (!canOpenContainer(pane, item)) {
 		void Nui.frontEndSound('DISABLED');
 		return;
 	}

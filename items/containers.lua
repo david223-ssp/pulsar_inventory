@@ -112,4 +112,20 @@ _itemsSource["containers"] = {
 		container = 91,
 		--durability = (60 * 60 * 24 * 30),
 	},
+	{
+		name = "backpack",
+		label = "Backpack",
+		description = "Equip it in the backpack slot to carry more.",
+		price = 250,
+		isUsable = true,
+		isRemoved = false,
+		isStackable = false,
+		type = 10,
+		rarity = 1,
+		closeUi = false,
+		metalic = false,
+		weight = 3,
+		container = 301,
+		backpack = true, -- accepted by the backpack equipment slot (Config.Equipment)
+	},
 }

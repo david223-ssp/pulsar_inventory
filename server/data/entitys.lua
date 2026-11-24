@@ -2740,4 +2740,24 @@ _entityTypes = {
 		capacity = 200,
 		name = "Public Prison Stash",
 	},
+	{
+		id = 300, -- Config.Equipment.invType
+		slots = 6,
+		capacity = 1000,
+		name = "Equipment",
+	},
+	{
+		id = 301,
+		slots = 15,
+		capacity = 40,
+		name = "Backpack",
+	},
+	{
+		-- bandeja do cartão SIM do item "phone" (pulsar_phone). A capacidade igual
+		-- ao peso do simcard (0.1) impede que caibam itens mais pesados.
+		id = 302,
+		slots = 1,
+		capacity = 0.1,
+		name = "SIM Tray",
+	},
 }

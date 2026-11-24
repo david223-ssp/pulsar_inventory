@@ -8,6 +8,131 @@ Config.DropPropDistance = 25.0
 -- item name to sync with wallet cash (see items/misc.lua's "cash" entry), or false to disable
 Config.CashAsItem = 'cash'
 
+-- Itens físicos no chão (client/drops.lua, server/ground_items.lua): cada item de uma dropzone é um prop seu, no
+-- sítio onde caiu, que se apanha com o target. Enabled = false volta ao saco único por dropzone (Config.DropProp).
+Config.GroundItems = {
+	Enabled = true,
+	PickupRange = 2.5,   -- metros entre o jogador e o item para o apanhar
+	ScatterRadius = 1.2, -- itens arrastados para o painel do chão espalham-se até esta distância do centro
+	MaxDrift = 4.0,      -- uma posição guardada mais longe do centro do que isto é refeita
+	DropAhead = 0.55,    -- "largar" põe o item esta distância à frente do jogador
+	-- prop de cada item; um modelo que não exista cai em DefaultProp, e esse em Config.DropProp
+	DefaultProp = "prop_paper_bag_small",
+	Props = {
+		cash = "prop_cash_pile_01",
+		phone = "prop_npc_phone_02",
+		water = "prop_ld_flow_bottle",
+		coffee = "p_ing_coffeecup_01",
+		sandwich = "prop_sandwich_01",
+		sandwich_blt = "prop_sandwich_01",
+		armor = "prop_armour_pickup",
+		heavyarmor = "prop_armour_pickup",
+		pdarmor = "prop_armour_pickup",
+		radio = "prop_cs_walkie_talkie",
+		radio_shitty = "prop_cs_walkie_talkie",
+	},
+	-- por tipo de item (items/*.lua: 1 básico, 2 arma, 9 munição, 10 contentor...). As armas (tipo 2) usam o modelo da própria arma.
+	TypeProps = {
+		[9] = "prop_ld_ammo_pack_01",
+		[10] = "prop_cs_heist_bag_01",
+	},
+	-- Apanhar: etiqueta flutuante por cima do item mais perto/para onde olhas, e [E] apanha (como no WHIP).
+	Prompt = true,
+	PromptRange = 2.0,  -- metros entre o jogador e o item para a etiqueta aparecer
+	PromptKey = 38,     -- tecla do "apanhar" (38 = E)
+	PromptKeyLabel = "E",
+	Outline = true,     -- contorno no item que a etiqueta está a mostrar
+	-- Target (olhar e escolher "Apanhar" / "Abrir monte"). Com a etiqueta ligada fica desligado por defeito.
+	UseTarget = false,
+	Text = {
+		Pickup = "Apanhar %s",
+		Open = "Abrir monte",
+	},
+}
+
+-- Colocar (client/place.lua): "Place" no menu do item mostra uma cópia transparente que segue a câmara.
+-- [E] coloca o item exatamente ali, [Roda do rato] roda-o, [C] cancela.
+Config.PlaceMode = {
+	MaxDistance = 3.5,  -- metros entre o jogador e o sítio onde o item fica
+	Alpha = 160,        -- transparência da pré-visualização (0-255)
+	RotateStep = 10.0,  -- graus por cada passo da roda do rato
+	Timeout = 60000,    -- ms até o modo colocar acabar sozinho
+	Anim = { dict = "pickup_object", clip = "putdown_low" },
+	Blacklist = {},     -- [nome] = true: não se pode colocar
+}
+
+-- Dar em mão e atirar (client/give.lua), como no WHIP: "Give" no menu do item põe-no na mão; [E] dá à pessoa para
+-- onde estás virado, [Clique esquerdo] atira-o para onde apontas, [C] cancela.
+Config.GiveMode = {
+	MaxDistance = 3.0,       -- metros até à pessoa a quem dás
+	AimAngle = 30.0,         -- graus: a pessoa tem de estar mais ou menos à tua frente (para onde a câmara aponta)
+	Timeout = 30000,         -- ms até o modo dar acabar sozinho
+	ThrowSpeed = 14.0,       -- m/s com que o item sai da mão
+	ThrowMaxDistance = 35.0, -- metros: um item que caia mais longe do que isto é recusado (fica contigo)
+	ThrowReleaseMs = 350,    -- ms da animação de atirar até o item sair da mão
+	VisualRange = 80.0,      -- metros: quem está mais longe não vê o item a voar
+	ThrowAnim = { dict = "anim@narcotics@trash", clip = "drop_front" },
+	GiveAnim = { dict = "mp_common", giver = "givetake1_a", receiver = "givetake1_b" },
+	-- onde o item fica na mão direita (osso 57005): posição e rotação; ItemOffsets por item para acertar
+	HandOffset = { x = 0.12, y = 0.02, z = -0.02, rx = -90.0, ry = 0.0, rz = 0.0 },
+	ItemOffsets = {},
+	Blacklist = {},      -- [nome] = true: não se pode dar
+	ThrowBlacklist = {}, -- [nome] = true: não se pode atirar
+	Text = {
+		HintTarget = "[E] Dar a esta pessoa  |  [Clique esquerdo] Atirar  |  [C] Cancelar",
+		HintNoTarget = "Vira-te para alguém para dar  |  [Clique esquerdo] Atirar  |  [C] Cancelar",
+		HintPlace = "[E] Colocar %s  |  [Roda do rato] Rodar  |  [C] Cancelar",
+		HintPlaceInvalid = "Aponta para o chão, mais perto  |  [C] Cancelar",
+		Cancelled = "Cancelaste",
+		InVehicle = "Não podes fazer isso dentro de um veículo",
+		TimedOut = "Demoraste demasiado",
+		YouGave = "Deste %sx %s",
+		YouThrew = "Atiraste %sx %s",
+		YouPlaced = "Colocaste %sx %s",
+		YouPickedUp = "Apanhaste %sx %s",
+		YouReceived = "Recebeste %sx %s",
+		NoTarget = "Não há ninguém para receber",
+		TooFar = "Estás demasiado longe",
+		TooFast = "Calma",
+		ItemGone = "Já não tens esse item",
+		NoRoom = "Não tens espaço no inventário",
+		TheyHaveNoRoom = "A pessoa não tem espaço no inventário",
+		TheyHadNoRoomYou = "Alguém tentou dar-te um item mas não tens espaço",
+		TheyAreTooHeavy = "A pessoa não aguenta com tanto peso",
+		CantGive = "Esse item não se pode dar",
+		CantThrow = "Esse item não se pode atirar",
+		CantPlace = "Esse item não se pode colocar",
+		PlaceFailed = "Não foi possível colocar o item",
+		GroundFull = "Não cabe mais nada neste sítio",
+		GiveFailed = "Não foi possível dar o item",
+		ThrowFailed = "Não foi possível atirar o item",
+		PickupFailed = "Não foi possível apanhar o item",
+		AlreadyTaken = "Alguém já apanhou isso",
+	},
+}
+
+-- Character equipment shown around the silhouette in the UI, stored as its own inventory per character (owner = SID).
+-- Slot numbers match the UI: 1 backpack, 2 armor, 3 phone, 4 parachute, 5 wallet, 6 key.
+-- Only slots listed in `slots` accept items; the others are display-only for now (other resources still look for
+-- armor/phone/etc. in the player inventory, so moving those out would break them).
+-- Health & Injuries tab (client/health.lua, server/health.lua). pulsar_damage owns the data and all healing;
+-- the inventory only shows it and, on "Heal Injury", uses the first of these items the player carries through the
+-- normal item-use flow (so pulsar_damage's own item effect, animation and removal apply).
+Config.HealthTab = {
+	resource = "pulsar_damage",
+	healItems = { "bandage", "firstaid", "ifak", "gauze", "tourniquet" },
+	criticalThreshold = 70, -- damage at/above this is Critical; Major starts at pulsar_damage's limpThreshold
+}
+
+Config.Equipment = {
+	invType = 300,
+	backpackSlot = 1,
+	slots = {
+		-- any item flagged `backpack = true` (a type 10 container); its storage opens under the player pane while equipped
+		[1] = { id = "backpack", accepts = function(item) return item ~= nil and item.backpack == true and item.container ~= nil end },
+	},
+}
+
 function hasValue(tbl, value)
 	for k, v in ipairs(tbl or {}) do
 		if v == value or (type(v) == "table" and hasValue(v, value)) then

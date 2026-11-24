@@ -67,6 +67,9 @@ export const Nui = {
 	close: () => send('Close'),
 	crashed: () => send('Crashed'),
 	sendNotify: (alert: 'success' | 'warning' | 'error', message: string, time?: number) => send('SendNotify', { alert, message, time }),
+	/** Health & Injuries tab, handled by client/health.lua; undefined in dev / when nothing answers */
+	getHealthData: () => sendJson<unknown>('getHealthData', {}, undefined),
+	healInjury: (id: string) => send('healInjury', { id }),
 	useItem: (owner: string | number, slot: number, invType: number) => {
 		void send('FrontEndSound', 'SELECT');
 		return send('UseItem', { owner, slot, invType });
@@ -78,6 +81,10 @@ export const Nui = {
 
 	addToShop: (payload: AddToShopPayload) => sendJson<unknown>('AddToShop', payload, { success: true }),
 	dropToGround: (payload: DropToGroundPayload) => send('DropToGround', payload),
+	/** give mode, client/give.lua: the item in hand to give (E) or throw (left click) */
+	startGiveMode: (payload: { slot: number; count: number; name: string }) => send('StartGiveMode', payload),
+	/** place mode, client/place.lua: a see-through preview to put the item exactly somewhere */
+	startPlaceMode: (payload: { slot: number; count: number; name: string }) => send('StartPlaceMode', payload),
 
 	craft: (bench: string, qty: number, result: string) => sendJson<CraftResult | false>('Crafting:Craft', { bench, qty, result }, { inventory: undefined, cooldowns: {} }),
 };

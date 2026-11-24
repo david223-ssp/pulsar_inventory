@@ -826,8 +826,25 @@ end)
 RegisterNetEvent("Inventory:Client:SetSlot", function(owner, type, slot)
 	if SecondInventory?.owner == owner and SecondInventory?.invType == type then
 		plsr.Inventory.Set.Secondary:Slot(slot)
+	elseif tonumber(type) == Config.Equipment.invType then
+		SendNUIMessage({ type = "SET_EQUIPMENT_SLOT", data = { slot = slot } })
+	elseif _equippedBackpack ~= nil and _equippedBackpack.owner == owner and _equippedBackpack.invType == tonumber(type) then
+		SendNUIMessage({ type = "SET_BACKPACK_SLOT", data = { slot = slot } })
 	else
 		plsr.Inventory.Set.Player:Slot(slot)
+	end
+end)
+
+-- equipment pane + the equipped backpack's storage (nil when no backpack is worn), see server/equipment.lua
+_equippedBackpack = nil
+RegisterNetEvent("Inventory:Client:Equipment", function(equipment, backpack)
+	_equippedBackpack = backpack and { owner = backpack.owner, invType = tonumber(backpack.invType) } or nil
+
+	SendNUIMessage({ type = "SET_EQUIPMENT_INVENTORY", data = equipment })
+	if backpack then
+		SendNUIMessage({ type = "SET_BACKPACK_INVENTORY", data = backpack })
+	else
+		SendNUIMessage({ type = "HIDE_BACKPACK_INVENTORY", data = {} })
 	end
 end)
 

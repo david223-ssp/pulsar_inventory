@@ -1,11 +1,17 @@
 // Dev-only simulated Lua message stream. Query params:
 //   ?mode=crafting            opens straight into the crafting bench
-//   (no ?secondary=)          player inventory only, the default view
+//   (no ?secondary=)          a ground "Drop" pane, the default view (matches the Figma frame)
+//   ?secondary=none           player inventory only
 //   ?secondary=ground         a ground/dropzone pane, no prices
+//   ?backpack=0               starts with the backpack slot empty (drag the spare backpack from slot 6 in)
+//   ?tab=health|crafting|...  opens on a given top-nav tab
+//   ?hotbar=1                 also pops the hotbar + equipped weapon overlay
+//   ?health=0                 no setHealthData (Health & Injuries tab shows as unavailable)
 //   ?secondary=shop           a fixed shop pane
 //   ?secondary=playershop     a player-shop pane in modify mode
 
 import { applyMessage } from './messages';
+import { devHooks, equipmentPane } from './store/inventory.svelte';
 import type { ItemDefinition, InventorySlotItem, PaneState, Recipe } from './types';
 
 const ITEMS: Record<string, ItemDefinition> = {
@@ -28,6 +34,11 @@ const ITEMS: Record<string, ItemDefinition> = {
 		weight: 4,
 		durability: 86400,
 	},
+	backpack: { name: 'backpack', label: 'Backpack', description: 'Equip it in the backpack slot to carry more.', price: 250, isUsable: true, isStackable: false, type: 10, rarity: 1, weight: 3, container: 301, backpack: true, iconOverride: 'parachute' },
+	cigar: { name: 'cigar', label: 'Russian Cream', description: 'A fine hand-rolled cigar.', price: 40, isUsable: true, isStackable: 10, type: 1, rarity: 6, weight: 0.1 },
+	parachute: { name: 'parachute', label: 'Parachute', description: 'Pull the cord.', price: 250, isUsable: true, isStackable: false, type: 13, rarity: 1, weight: 0.1 },
+	armor: { name: 'armor', label: 'Armor', description: 'Light body armor.', price: 300, isUsable: true, isStackable: 5, type: 13, rarity: 1, weight: 0.1 },
+	WEAPON_COMBATPISTOL: { name: 'WEAPON_COMBATPISTOL', label: 'Pistol XM3', description: 'Compact sidearm.', requiresLicense: true, price: 2500, isUsable: true, isStackable: false, type: 2, rarity: 1, weight: 3 },
 	scrapmetal: { name: 'scrapmetal', label: 'Scrap Metal', description: 'Salvaged parts.', price: 8, isStackable: 50, type: 4, rarity: 1, weight: 0.4 },
 	cloth: { name: 'cloth', label: 'Cloth', description: 'Woven fabric.', price: 4, isStackable: 50, type: 4, rarity: 1, weight: 0.1 },
 	tape: { name: 'tape', label: 'Duct Tape', description: 'Fixes anything.', price: 6, isStackable: 20, type: 4, rarity: 1, weight: 0.1 },
@@ -35,23 +46,37 @@ const ITEMS: Record<string, ItemDefinition> = {
 	wiring: { name: 'wiring', label: 'Wiring', description: 'Copper wiring.', price: 10, isStackable: 50, type: 4, rarity: 2, weight: 0.15 },
 };
 
+// Mirrors the Figma frame: cigar in 1, parachute in 5, pistol in 10, rifle in 15; the rest below the fold
 const PLAYER_INVENTORY: InventorySlotItem[] = [
+	{ Name: 'cigar', Slot: 1, Count: 1, CreateDate: Date.now() / 1000 },
+	{ Name: 'parachute', Slot: 5, Count: 1, CreateDate: Date.now() / 1000 },
+	{ Name: 'WEAPON_COMBATPISTOL', Slot: 10, Count: 1, CreateDate: Date.now() / 1000, MetaData: { SerialNumber: '210-774' } },
 	// Three different wear levels so all three durability-meter tiers (high/green, mid/amber, low/red) are visible at once in dev
-	{ Name: 'WEAPON_ADVANCEDRIFLE', Slot: 1, Count: 1, CreateDate: Date.now() / 1000 - 3600 * 2, MetaData: { SerialNumber: '482-119' } },
-	{ Name: 'water', Slot: 2, Count: 6, CreateDate: Date.now() / 1000 },
-	{ Name: 'bandage', Slot: 3, Count: 3, CreateDate: Date.now() / 1000 },
-	{ Name: 'repairkit', Slot: 4, Count: 1, CreateDate: Date.now() / 1000 - 6480 },
-	{ Name: 'phone', Slot: 5, Count: 1, CreateDate: Date.now() / 1000 },
-	{ Name: 'lockpick', Slot: 8, Count: 2, CreateDate: Date.now() / 1000 - 1800 },
-	{ Name: 'scrapmetal', Slot: 10, Count: 14, CreateDate: Date.now() / 1000 },
-	{ Name: 'cloth', Slot: 11, Count: 3, CreateDate: Date.now() / 1000 },
-	{ Name: 'tape', Slot: 12, Count: 6, CreateDate: Date.now() / 1000 },
-	{ Name: 'plastic', Slot: 13, Count: 2, CreateDate: Date.now() / 1000 },
+	{ Name: 'WEAPON_ADVANCEDRIFLE', Slot: 15, Count: 1, CreateDate: Date.now() / 1000 - 3600 * 2, MetaData: { SerialNumber: '482-119' } },
+	{ Name: 'water', Slot: 21, Count: 6, CreateDate: Date.now() / 1000 },
+	{ Name: 'bandage', Slot: 22, Count: 3, CreateDate: Date.now() / 1000 },
+	{ Name: 'repairkit', Slot: 23, Count: 1, CreateDate: Date.now() / 1000 - 6480 },
+	{ Name: 'lockpick', Slot: 24, Count: 2, CreateDate: Date.now() / 1000 - 1800 },
+	{ Name: 'scrapmetal', Slot: 26, Count: 14, CreateDate: Date.now() / 1000 },
+	{ Name: 'cloth', Slot: 27, Count: 3, CreateDate: Date.now() / 1000 },
+	{ Name: 'tape', Slot: 28, Count: 6, CreateDate: Date.now() / 1000 },
+	{ Name: 'plastic', Slot: 29, Count: 2, CreateDate: Date.now() / 1000 },
+	// a spare backpack to drag into the backpack slot
+	{ Name: 'backpack', Slot: 6, Count: 1, CreateDate: Date.now() / 1000, MetaData: { Container: 'bp_2' } },
+];
+
+const BACKPACK_INVENTORY: InventorySlotItem[] = [
+	{ Name: 'cigar', Slot: 1, Count: 1, CreateDate: Date.now() / 1000 },
+	{ Name: 'parachute', Slot: 5, Count: 1, CreateDate: Date.now() / 1000 },
+	{ Name: 'WEAPON_COMBATPISTOL', Slot: 10, Count: 1, CreateDate: Date.now() / 1000 },
 ];
 
 const GROUND_INVENTORY: InventorySlotItem[] = [
-	{ Name: 'repairkit', Slot: 1, Count: 1, CreateDate: Date.now() / 1000 },
-	{ Name: 'moneybag', Slot: 3, Count: 1, CreateDate: Date.now() / 1000 },
+	{ Name: 'cigar', Slot: 1, Count: 1, CreateDate: Date.now() / 1000 },
+	{ Name: 'parachute', Slot: 5, Count: 1, CreateDate: Date.now() / 1000 },
+	{ Name: 'WEAPON_COMBATPISTOL', Slot: 10, Count: 1, CreateDate: Date.now() / 1000 },
+	{ Name: 'WEAPON_ADVANCEDRIFLE', Slot: 15, Count: 1, CreateDate: Date.now() / 1000 - 3600 },
+	{ Name: 'moneybag', Slot: 18, Count: 1, CreateDate: Date.now() / 1000 },
 ];
 
 // Prices set per-slot, matching how a real shop stock row arrives from the server
@@ -82,7 +107,9 @@ const RECIPES: Recipe[] = [
 export function startMock(): void {
 	const params = new URLSearchParams(window.location.search);
 	const startInCrafting = params.get('mode') === 'crafting';
-	const secondaryFlavor = params.get('secondary');
+	const secondaryFlavor = params.get('secondary') ?? 'ground';
+	const showBackpack = params.get('backpack') !== '0';
+	const startTab = params.get('tab');
 
 	setTimeout(() => {
 		applyMessage('SET_ITEMS', { items: ITEMS });
@@ -92,7 +119,7 @@ export function startMock(): void {
 			loaded: true,
 			size: 40,
 			invType: 1,
-			name: 'Player Storage',
+			name: 'Xoticz Dev',
 			inventory: PLAYER_INVENTORY,
 			disabled: {},
 			owner: 1,
@@ -101,7 +128,7 @@ export function startMock(): void {
 		};
 		applyMessage('SET_PLAYER_INVENTORY', playerPane);
 
-		if (secondaryFlavor !== null) {
+		if (secondaryFlavor !== 'none') {
 			applyMessage('SHOW_SECONDARY_INVENTORY', {});
 
 			const secondaryPane: Partial<PaneState> =
@@ -120,12 +147,41 @@ export function startMock(): void {
 								playerShop: true,
 								modifyShop: true,
 							}
-						: { loaded: true, size: 20, invType: 10, name: 'Dropzone', inventory: GROUND_INVENTORY, disabled: {}, owner: 'dropzone_1', capacity: 500 };
+						: { loaded: true, size: 25, invType: 10, name: 'Drop', inventory: GROUND_INVENTORY, disabled: {}, owner: 'dropzone_1', capacity: 500 };
 			applyMessage('SET_SECONDARY_INVENTORY', secondaryPane);
 		}
 
-		applyMessage('HOTBAR_SHOW', { items: [PLAYER_INVENTORY[1], PLAYER_INVENTORY[2]] });
-		applyMessage('SET_EQUIPPED', { item: PLAYER_INVENTORY[0] });
+		// Fakes the server's Inventory:Client:Equipment push: equipment pane + the worn backpack's storage
+		const backpackStorage: Record<string, InventorySlotItem[]> = { 'container:bp_1': BACKPACK_INVENTORY, 'container:bp_2': [] };
+		const pushEquipment = () => {
+			const worn = equipmentPane.inventory.find((i) => i?.Slot === 1);
+			const container = worn ? (worn.MetaData as { Container?: string } | undefined)?.Container : undefined;
+			if (worn && container) {
+				const owner = `container:${container}`;
+				applyMessage('SET_BACKPACK_INVENTORY', { loaded: true, size: 15, invType: 301, name: 'Backpack', inventory: backpackStorage[owner] ?? [], disabled: {}, owner, capacity: 40 });
+			} else {
+				applyMessage('HIDE_BACKPACK_INVENTORY', {});
+			}
+		};
+		devHooks.equipmentChanged = () => setTimeout(pushEquipment, 300);
+
+		applyMessage('SET_EQUIPMENT_INVENTORY', {
+			loaded: true,
+			size: 6,
+			invType: 300,
+			name: 'Equipment',
+			owner: 'SID-1',
+			capacity: 1000,
+			disabled: {},
+			inventory: showBackpack ? [{ Name: 'backpack', Slot: 1, Count: 1, CreateDate: Date.now() / 1000, MetaData: { Container: 'bp_1' } }] : [],
+		});
+		applyMessage('SET_EQUIPMENT', { keybinds: { phone: 'M' } });
+		pushEquipment();
+
+		if (params.get('hotbar') === '1') {
+			applyMessage('HOTBAR_SHOW', { items: [PLAYER_INVENTORY[0], PLAYER_INVENTORY[1]] });
+			applyMessage('SET_EQUIPPED', { item: PLAYER_INVENTORY[3] });
+		}
 
 		applyMessage('ADD_ALERT', { alert: { id: 1, type: 'add', item: 'water', count: 6 } });
 		applyMessage('ADD_ALERT', { alert: { id: 2, type: 'used', item: 'bandage', count: 1 } });
@@ -133,6 +189,25 @@ export function startMock(): void {
 
 		if (startInCrafting) {
 			applyMessage('SET_BENCH', { bench: 'workbench_1', cooldowns: { recipe_lockpick: Date.now() + 1000 * 60 * 12 }, recipes: RECIPES });
+		}
+
+		if (startTab === 'health' || startTab === 'crafting' || startTab === 'experience') applyMessage('SET_TAB', { tab: startTab });
+
+		// pulsar_damage's shape: injuries keyed by part; keys are mixed on purpose to exercise the normalizer
+		if (params.get('health') !== '0') {
+			applyMessage('setHealthData', {
+				available: true,
+				health: 100,
+				armor: 0,
+				stamina: 0,
+				injuries: {
+					LARM: { damage: 85, bleeding: 1 },
+					['right-leg']: { damage: 55, bleeding: 0 },
+					head: { damage: 20, bleeding: 0 },
+				},
+				thresholds: { major: 40, critical: 70 },
+				healItems: ['bandage', 'firstaid', 'ifak', 'gauze', 'tourniquet'],
+			});
 		}
 
 		applyMessage('APP_SHOW', {});

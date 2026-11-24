@@ -5,7 +5,7 @@
 	see config.ts for the RARITY/ITEM_TYPES maps that consume them
 */
 
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Roboto:wght@700&family=Space+Grotesk:wght@500;600&display=swap');
 
 :root {
 	/* ---- Backgrounds ---- */
@@ -46,7 +46,32 @@
 
 	/* ---- Typography ---- */
 	--font-heading: 'Space Grotesk', -apple-system, system-ui, sans-serif;
-	--font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+	--font-body: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+	--font-tabs: 'Roboto', 'Geist', system-ui, sans-serif;
+
+	/* ---- Layout scale ----
+	   The inventory is laid out on a 2146x1207 design canvas; 1 design px = calc(var(--u) * 1),
+	   so the whole screen scales uniformly with the viewport and never overflows it */
+	--u: min(calc(100vw / 2146), calc(100vh / 1207));
+	/* ox_inventory's px values (designed at 1080p) on our canvas: 1px there = 1.1177u here */
+	--r: calc(var(--u) * 1.1177);
+
+	/* ---- Glass panels / slots ---- */
+	--glass-bg: rgba(30, 30, 30, 0.6);
+	--glass-bg-soft: rgba(30, 30, 30, 0.3);
+	--glass-border: #999999;
+	--glass-border-input: rgba(255, 255, 255, 0.2);
+	--glass-text: rgba(255, 255, 255, 0.9);
+	--slot-text: #f2f2f2;
+	--slot-badge-text: #1a1a1a;
+	--slot-badge-bg: linear-gradient(127deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.7) 100%);
+	--color-equipped: #52e0e0;
+	--tab-text: #dee3e8;
+	--health-text: #eeeeef;
+	--health-rule: #707176;
+	--health-track: rgba(38, 40, 40, 0.71);
+	--health-fill: #a3cf1a;
+	--tab-bg: rgba(0, 0, 0, 0.49);
 
 	/* ---- Effects ---- */
 	--glow-soft: 0 0 10px 1px rgba(139, 92, 246, 0.25);
